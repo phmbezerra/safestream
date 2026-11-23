@@ -19,7 +19,7 @@ export function createApp(){
     if(req.method==='POST'&&parts[3]==='join'){const m=store.join(r,user,(await read(req)).invite);return json(res,200,{roomId:r.id,role:m.role});}
     if(req.method==='POST'&&parts[3]==='invites'){store.requireMember(r,user);return json(res,201,{invite:store.invite(r,user)});}
     if(req.method==='GET'&&parts.length===3){const m=store.requireMember(r,user);return json(res,200,{roomId:r.id,ownerId:r.ownerId,role:m.role,members:[...r.members.values()]});}
-    if(req.method==='DELETE'&&parts[3]==='members'&&parts[4]){store.requireMember(r,user);store.revoke(r,user,parts[4]);return json(res,200,{revoked:true,notice:'Existing P2P media connections are NOT cryptographically revoked.'});}
+    if(req.method==='DELETE'&&parts[3]==='members'&&parts[4]){store.requireMember(r,user);store.revoke(r,user,parts[4]);return json(res,200,{revoked:true,notice:'Signaling access removed and cooperative peers notified. A modified P2P client may ignore revocation; media access is NOT cryptographically revoked.'});}
    }
    return json(res,404,{error:'Not found'});
   }catch(e){return json(res,e.status||500,{error:e.status?e.message:'Internal error'});}
@@ -35,7 +35,7 @@ export function createApp(){
     if(!authorized){
      if(msg.type!=='auth')return ws.close(4001,'Authentication required');
      const user=store.identity(msg.token);if(!user)return ws.close(4001,'Unauthorized');
-     const r=store.get(msg.roomId);store.requireMember(r,user);
+     let r;try{r=store.get(msg.roomId);store.requireMember(r,user);}catch{return ws.close(4001,'Not a room member');}
      const existing=r.peers.get(user.id);if(existing&&existing!==ws)existing.close(4002,'Replaced session');
      uid=user.id;current=r;authorized=true;r.peers.set(uid,ws);
      ws.send(JSON.stringify({type:'ready',id:uid,role:r.members.get(uid).role,peers:[...r.peers.keys()].filter(id=>id!==uid)}));
