@@ -1,0 +1,354 @@
+{
+  "schemaVersion": "t06-1",
+  "test": "T-06 gateway revocation",
+  "startedAt": "2026-11-23T20:24:14.931Z",
+  "environment": {
+    "node": "v24.18.0",
+    "platform": "win32/x64",
+    "topology": "127.0.0.1 in-process app with real HTTP + WebSocket clients"
+  },
+  "results": [
+    {
+      "run": 1,
+      "startedAt": "2026-11-23T20:24:14.933Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 17.364,
+        "revokeRequestToSocketCloseMs": 18.974,
+        "httpResponseToSocketCloseMs": 1.609
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 2,
+      "startedAt": "2026-11-23T20:24:15.324Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.424,
+        "revokeRequestToSocketCloseMs": 17.179,
+        "httpResponseToSocketCloseMs": 0.755
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 3,
+      "startedAt": "2026-11-23T20:24:15.650Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 17.27,
+        "revokeRequestToSocketCloseMs": 17.865,
+        "httpResponseToSocketCloseMs": 0.595
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 4,
+      "startedAt": "2026-11-23T20:24:16.008Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.84,
+        "revokeRequestToSocketCloseMs": 17.299,
+        "httpResponseToSocketCloseMs": 0.459
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 5,
+      "startedAt": "2026-11-23T20:24:16.352Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.513,
+        "revokeRequestToSocketCloseMs": 16.95,
+        "httpResponseToSocketCloseMs": 0.438
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 6,
+      "startedAt": "2026-11-23T20:24:16.708Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.835,
+        "revokeRequestToSocketCloseMs": 17.262,
+        "httpResponseToSocketCloseMs": 0.427
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 7,
+      "startedAt": "2026-11-23T20:24:17.069Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.401,
+        "revokeRequestToSocketCloseMs": 17.011,
+        "httpResponseToSocketCloseMs": 0.61
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 8,
+      "startedAt": "2026-11-23T20:24:17.474Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 15.928,
+        "revokeRequestToSocketCloseMs": 16.946,
+        "httpResponseToSocketCloseMs": 1.018
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 9,
+      "startedAt": "2026-11-23T20:24:17.829Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.253,
+        "revokeRequestToSocketCloseMs": 16.838,
+        "httpResponseToSocketCloseMs": 0.585
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 10,
+      "startedAt": "2026-11-23T20:24:18.189Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 17.255,
+        "revokeRequestToSocketCloseMs": 17.793,
+        "httpResponseToSocketCloseMs": 0.539
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 11,
+      "startedAt": "2026-11-23T20:24:18.547Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.739,
+        "revokeRequestToSocketCloseMs": 17.207,
+        "httpResponseToSocketCloseMs": 0.469
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 12,
+      "startedAt": "2026-11-23T20:24:18.920Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.442,
+        "revokeRequestToSocketCloseMs": 16.89,
+        "httpResponseToSocketCloseMs": 0.448
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 13,
+      "startedAt": "2026-11-23T20:24:19.278Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.239,
+        "revokeRequestToSocketCloseMs": 16.726,
+        "httpResponseToSocketCloseMs": 0.487
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 14,
+      "startedAt": "2026-11-23T20:24:19.652Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.492,
+        "revokeRequestToSocketCloseMs": 18.583,
+        "httpResponseToSocketCloseMs": 2.092
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 15,
+      "startedAt": "2026-11-23T20:24:20.009Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.572,
+        "revokeRequestToSocketCloseMs": 16.974,
+        "httpResponseToSocketCloseMs": 0.402
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 16,
+      "startedAt": "2026-11-23T20:24:20.352Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.067,
+        "revokeRequestToSocketCloseMs": 16.476,
+        "httpResponseToSocketCloseMs": 0.408
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 17,
+      "startedAt": "2026-11-23T20:24:20.710Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.747,
+        "revokeRequestToSocketCloseMs": 17.433,
+        "httpResponseToSocketCloseMs": 0.686
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 18,
+      "startedAt": "2026-11-23T20:24:21.085Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.359,
+        "revokeRequestToSocketCloseMs": 16.795,
+        "httpResponseToSocketCloseMs": 0.436
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 19,
+      "startedAt": "2026-11-23T20:24:21.458Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.511,
+        "revokeRequestToSocketCloseMs": 17.151,
+        "httpResponseToSocketCloseMs": 0.641
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    },
+    {
+      "run": 20,
+      "startedAt": "2026-11-23T20:24:21.816Z",
+      "status": "pass",
+      "clientObserved": {
+        "revokeRequestToHttpResponseMs": 16.156,
+        "revokeRequestToSocketCloseMs": 16.597,
+        "httpResponseToSocketCloseMs": 0.441
+      },
+      "framesBeforeRevoke": 1,
+      "framesObservedAfterHttpResponse": 0,
+      "controlViewerReceivedAfterRevoke": true,
+      "revokedSocketCloseCode": 4003,
+      "revokedReconnectCloseCode": 4001,
+      "note": null
+    }
+  ],
+  "summary": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "requestToResponse": {
+      "count": 20,
+      "minMs": 15.928,
+      "meanMs": 16.57,
+      "p50Ms": 16.492,
+      "p95Ms": 17.27,
+      "maxMs": 17.364
+    },
+    "requestToClose": {
+      "count": 20,
+      "minMs": 16.476,
+      "meanMs": 17.247,
+      "p50Ms": 17.011,
+      "p95Ms": 18.583,
+      "maxMs": 18.974
+    }
+  },
+  "completedAt": "2026-11-23T20:24:22.177Z"
+}

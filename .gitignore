@@ -7,3 +7,6 @@ dist/
 *.tsbuildinfo
 fix_safestream_v03.py
 safestream-v03-patch/
+safestream-v04/
+safestream-v05-gateway/
+safestream-v06-benchmark/

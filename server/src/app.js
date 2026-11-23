@@ -1,8 +1,10 @@
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createStore } from './core.js';
+import { createMediaGateway } from './media-gateway.js';
 export function createApp(){
  const store=createStore();
+ const mediaGateway=createMediaGateway(store);
  function json(res,status,obj){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'http://localhost:5173','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS'});res.end(JSON.stringify(obj));}
  async function read(req){let data='';for await(const c of req){data+=c;if(data.length>8192)throw Object.assign(new Error('Payload too large'),{status:413});}try{return JSON.parse(data||'{}')}catch{throw Object.assign(new Error('Invalid JSON'),{status:400})}}
  const server=http.createServer(async(req,res)=>{
@@ -19,13 +21,13 @@ export function createApp(){
     if(req.method==='POST'&&parts[3]==='join'){const m=store.join(r,user,(await read(req)).invite);return json(res,200,{roomId:r.id,role:m.role});}
     if(req.method==='POST'&&parts[3]==='invites'){store.requireMember(r,user);return json(res,201,{invite:store.invite(r,user)});}
     if(req.method==='GET'&&parts.length===3){const m=store.requireMember(r,user);return json(res,200,{roomId:r.id,ownerId:r.ownerId,role:m.role,members:[...r.members.values()]});}
-    if(req.method==='DELETE'&&parts[3]==='members'&&parts[4]){store.requireMember(r,user);store.revoke(r,user,parts[4]);return json(res,200,{revoked:true,notice:'Signaling access removed and cooperative peers notified. A modified P2P client may ignore revocation; media access is NOT cryptographically revoked.'});}
+    if(req.method==='DELETE'&&parts[3]==='members'&&parts[4]){store.requireMember(r,user);store.revoke(r,user,parts[4]);mediaGateway.revoke(r.id,parts[4]);return json(res,200,{revoked:true,notice:'Signaling access removed and cooperative peers notified. A modified P2P client may ignore revocation; media access is NOT cryptographically revoked.'});}
    }
    return json(res,404,{error:'Not found'});
   }catch(e){return json(res,e.status||500,{error:e.status?e.message:'Internal error'});}
  });
  const wss=new WebSocketServer({noServer:true,maxPayload:8192});
- server.on('upgrade',(req,socket,head)=>{const u=new URL(req.url,'http://localhost');if(u.pathname!=='/signal'||req.headers.origin!=='http://localhost:5173'){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws));});
+ server.on('upgrade',(req,socket,head)=>{const u=new URL(req.url,'http://localhost');if(req.headers.origin!=='http://localhost:5173'){socket.destroy();return;}if(u.pathname==='/media'){mediaGateway.wss.handleUpgrade(req,socket,head,ws=>mediaGateway.wss.emit('connection',ws));return;}if(u.pathname!=='/signal'){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws));});
  wss.on('connection',ws=>{
   let current=null; let uid=null; let authorized=false;
   const fail=(reason)=>{try{ws.send(JSON.stringify({type:'error',error:reason}))}catch{}};
@@ -55,5 +57,5 @@ export function createApp(){
   });
   ws.on('close',()=>{if(current&&current.peers.get(uid)===ws){current.peers.delete(uid);for(const peer of current.peers.values())if(peer.readyState===WebSocket.OPEN)peer.send(JSON.stringify({type:'peer-left',id:uid}));}});
  });
- return {server,store,wss};
+ return {server,store,wss,mediaWss:mediaGateway.wss};
 }
