@@ -1,0 +1,10 @@
+{
+  "name": "safestream-lab", "version": "0.2.0", "private": true,
+  "workspaces": ["server", "web"],
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB \"npm run dev -w server\" \"npm run dev -w web\"",
+    "test": "npm run test -w server",
+    "build": "npm run build -w web"
+  },
+  "devDependencies": { "concurrently": "^9.1.2" }
+}
