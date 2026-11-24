@@ -19,3 +19,4 @@ sfu/*.log
 safestream-v08-failclosed/
 .local/
 safestream-v09-recovery/
+safestream-v10-isolation/

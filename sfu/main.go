@@ -250,13 +250,9 @@ func (c *client) acceptOffer(sdp string) error {
 	return c.send(envelope{Type: "answer", SDP: c.peer.LocalDescription().SDP})
 }
 
-func main() {
-	base := os.Getenv("SAFESTREAM_NODE_API")
-	if base == "" {
-		base = "http://127.0.0.1:3001"
-	}
-	v := auth.NewValidator(base)
-	reg := &registry{rooms: make(map[string]*room)}
+// newRelayHandler exposes the production WebSocket/media handler to local
+// httptest-based security tests without opening the fixed port 3002.
+func newRelayHandler(v *auth.Validator, reg *registry) http.Handler {
 	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == allowedOrigin }}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -317,6 +313,16 @@ func main() {
 			}
 		}
 	})
+	return mux
+}
+
+func main() {
+	base := os.Getenv("SAFESTREAM_NODE_API")
+	if base == "" {
+		base = "http://127.0.0.1:3001"
+	}
+	v := auth.NewValidator(base)
+	reg := &registry{rooms: make(map[string]*room)}
 	log.Printf("SafeStream v0.7 WebRTC RTP relay at http://127.0.0.1:3002 (Node API: %s)", base)
-	log.Fatal(http.ListenAndServe("127.0.0.1:3002", mux))
+	log.Fatal(http.ListenAndServe("127.0.0.1:3002", newRelayHandler(v, reg)))
 }
