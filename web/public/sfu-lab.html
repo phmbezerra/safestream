@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SafeStream v0.7 · Real WebRTC Relay Lab</title>
+<style>
+:root{font-family:Inter,system-ui,Segoe UI,sans-serif;color:#eef3ff;background:#101626}
+*{box-sizing:border-box}body{max-width:1050px;margin:30px auto;padding:0 20px}h1{letter-spacing:-.035em;margin-bottom:6px}h1 span{color:#93b8ff}
+p{color:#afbed8;line-height:1.55}.warning{background:#292538;border:1px solid #59476d;border-radius:10px;padding:12px 16px;color:#efdcf9}
+section{background:#1b2436;border:1px solid #344054;border-radius:12px;padding:20px;margin:16px 0}
+h2{font-size:1.1rem;margin:0 0 14px}.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}input{padding:10px;min-width:170px;background:#0f172a;border:1px solid #45546d;border-radius:6px;color:white}button{padding:10px 14px;background:#527ed5;color:white;border:0;border-radius:7px;cursor:pointer}button:hover{background:#7097e5}button:disabled{opacity:.5;cursor:default}
+.video-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.video-card{background:#101626;border-radius:10px;padding:12px}.video-card video{background:#060b14;width:100%;aspect-ratio:16/9;object-fit:contain;border-radius:6px}.member{display:flex;justify-content:space-between;align-items:center;background:#202d43;padding:9px;margin:6px 0;border-radius:6px}.mono{font-family:ui-monospace,Consolas,monospace;font-size:.88rem;overflow-wrap:anywhere}
+#events{max-height:260px;overflow:auto;margin:0;padding:12px 12px 12px 28px;background:#101626;border-radius:8px;font-size:.85rem;line-height:1.7}#stats{white-space:pre-line;background:#101626;padding:14px;border-radius:8px}.green{color:#9addbc}.muted{color:#93a8cb}label{display:inline-flex;align-items:center;gap:8px}@media(max-width:700px){.video-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>SafeStream <span>v0.7 · WebRTC RTP Relay</span></h1>
+<p>Standalone SFU-style experiment · Synthetic participants · VP8 video · No server-side recording by default</p>
+<p class="warning">⚠ Local research prototype only. Requires the Node API and separate Go/Pion media server. The SFU is permitted to access transport packets; this is not end-to-end encrypted against the media server. No security or latency guarantees.</p>
+<section>
+<h2>1 · Laboratory identity</h2>
+<div class="row"><input id="label" placeholder="Alice / Bob / Carol" maxlength="32"/><button id="makeSession">Create demo session</button></div>
+<p id="identity" class="mono muted">No session</p>
+</section>
+<section>
+<h2>2 · Room and membership</h2>
+<div class="row"><button id="createRoom">Create room (publisher)</button><button id="refresh">Refresh members</button><button id="inviteButton">Generate invite</button></div>
+<div class="row"><input id="roomId" placeholder="Room ID"/><input id="invite" placeholder="One-use invite"/><button id="join">Join as viewer</button></div>
+<p id="inviteOutput" class="mono muted"></p>
+<p id="roomRole" class="mono muted">Not in a room</p>
+<div id="members"></div>
+</section>
+<section>
+<h2>3 · Media connection</h2>
+<div class="row"><button id="connect">Connect SFU media</button><button id="disconnect">Disconnect</button></div>
+<label><input type="checkbox" id="ignoreNotices" style="min-width:unset" />Ignore revocation notification locally (LAB only; server still terminates transport)</label>
+<p id="connection" class="mono muted">Not connected</p>
+<div class="video-grid"><div class="video-card"><h3>Publisher's screen</h3><video id="localVideo" autoplay playsinline muted></video></div><div class="video-card"><h3>Viewer's received video</h3><video id="remoteVideo" autoplay playsinline></video></div></div>
+<h3>WebRTC transport statistics</h3><div id="stats" class="mono">No active PeerConnection</div>
+</section>
+<section>
+<h2>4 · T-07 selective-revocation evidence</h2>
+<p>Technical telemetry is kept in browser memory. Export on Bob and Carol after 10–15 seconds following revocation. No screen frames, session secrets, SDP or invites are exported.</p>
+<div class="row"><button id="exportEvidence">Export evidence JSON</button><button id="markEvidence">Mark checkpoint</button></div>
+<p id="evidenceStatus" class="mono muted">No samples yet</p>
+</section>
+<section><h2>Experiment log (browser memory only)</h2><ol id="events"></ol></section>
+<script type="module">
+const API = 'http://127.0.0.1:3001';
+const SFU = 'ws://127.0.0.1:3002/ws';
+const $ = id => document.getElementById(id);
+let session = null, room = null, socket = null, pc = null, stream = null, statsTimer = null;
+let remoteFramesAtRevoke = null;
+const T07_CAPTURE_V1 = 't07-browser-1';
+const evidence = { schemaVersion: T07_CAPTURE_V1, startedAt: new Date().toISOString(),
+  platform: navigator.userAgent, events: [], samples: [] };
+function captureEvent(type, details={}) {
+  evidence.events.push({at:new Date().toISOString(), performanceMs:performance.now(), type, ...details});
+  if(evidence.events.length>1000)evidence.events.shift();
+}
+function addSample(details) {
+  evidence.samples.push({at:new Date().toISOString(), performanceMs:performance.now(), ...details});
+  if(evidence.samples.length>3000)evidence.samples.shift();
+  $('evidenceStatus').textContent=`${evidence.samples.length} media samples / ${evidence.events.length} events collected in this page`;
+}
+function exportEvidence() {
+  const data={...evidence, sessionLabel:session?.user?.label||null,
+    roomId:room?.roomId||null, role:room?.role||null,
+    exportedAt:new Date().toISOString(), notes:'Synthetic local experiment only; no media content recorded.'};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  const who=(session?.user?.label||'unknown').replace(/[^a-zA-Z0-9_-]/g,'_').toLowerCase();
+  a.download=`t07-${who}-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+$('exportEvidence').onclick=exportEvidence;
+$('markEvidence').onclick=()=>{captureEvent('manual_checkpoint');log('Evidence checkpoint marked')};
+const log = msg => {const li=document.createElement('li');li.textContent=new Date().toLocaleTimeString()+' — '+msg;$('events').prepend(li)};
+const fail = e => {log('ERROR: '+(e?.message || String(e)));console.error(e)};
+async function api(method, path, body) {
+ const response=await fetch(API+path,{method,headers:{'Content-Type':'application/json',...(session?{'Authorization':'Bearer '+session.secret}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+ const value=await response.json();if(!response.ok)throw new Error(value.error || ('HTTP '+response.status));return value;
+}
+const safe = async fn => {try{await fn()}catch(e){fail(e)}};
+function requireRoom(){if(!session || !room)throw new Error('Create/join a room first')}
+async function refresh(){requireRoom();room=await api('GET','/api/rooms/'+room.roomId);$('roomRole').textContent=room.roomId+' · '+room.role;
+ const list=$('members');list.replaceChildren();for(const member of room.members){
+  const div=document.createElement('div');div.className='member';const name=document.createElement('span');name.textContent=member.label+' ('+member.role+')';div.append(name);
+  if(room.role==='publisher'&&member.id!==room.ownerId){const revoke=document.createElement('button');revoke.textContent='Revoke viewer';revoke.onclick=()=>safe(async()=>{captureEvent('revoke_http_begin',{targetLabel:member.label});await api('DELETE','/api/rooms/'+room.roomId+'/members/'+member.id);captureEvent('revoke_http_ok',{targetLabel:member.label});log('Revoked '+member.label+' at '+performance.now().toFixed(1)+'ms (local clock)');await refresh()});div.append(revoke)}list.append(div);
+ }
+}
+function disconnect(){if(statsTimer){clearInterval(statsTimer);statsTimer=null}if(socket){const s=socket;socket=null;try{s.close()}catch{}}if(pc){const p=pc;pc=null;p.close()}if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('localVideo').srcObject=null;$('remoteVideo').srcObject=null;$('connection').textContent='Disconnected';}
+$('makeSession').onclick=()=>safe(async()=>{if(session)throw new Error('Reload page to create another synthetic identity');session=await api('POST','/api/sessions',{label:$('label').value.trim()});$('identity').textContent='Session: '+session.user.label+' (credentials only in memory)';log('Session created')});
+$('createRoom').onclick=()=>safe(async()=>{if(!session)throw new Error('Create a session first');disconnect();const result=await api('POST','/api/rooms');room={roomId:result.roomId};$('roomId').value=result.roomId;await refresh();log('Created room')});
+$('join').onclick=()=>safe(async()=>{if(!session)throw new Error('Create a session first');disconnect();const id=$('roomId').value.trim();await api('POST','/api/rooms/'+id+'/join',{invite:$('invite').value.trim()});room={roomId:id};await refresh();log('Joined room')});
+$('refresh').onclick=()=>safe(refresh);
+$('inviteButton').onclick=()=>safe(async()=>{requireRoom();const r=await api('POST','/api/rooms/'+room.roomId+'/invites');$('inviteOutput').textContent='One-time invite: '+r.invite;log('Generated one-time invite')});
+$('disconnect').onclick=disconnect;
+function awaitICE(peer){if(peer.iceGatheringState==='complete')return Promise.resolve();return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{peer.removeEventListener('icegatheringstatechange',check);reject(new Error('ICE gathering timeout'))},10000);function check(){if(peer.iceGatheringState==='complete'){clearTimeout(timeout);peer.removeEventListener('icegatheringstatechange',check);resolve()}}peer.addEventListener('icegatheringstatechange',check)})}
+async function connect(){requireRoom();disconnect();const isPublisher=room.role==='publisher';if(isPublisher){stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});$('localVideo').srcObject=stream;stream.getTracks().forEach(t=>t.addEventListener('ended',disconnect,{once:true}));}
+ pc=new RTCPeerConnection({iceServers:[]});const active=pc;
+ active.onconnectionstatechange=()=>{if(pc===active){$('connection').textContent='WebRTC: '+active.connectionState;captureEvent('webrtc_state',{state:active.connectionState});log('WebRTC state '+active.connectionState)}};
+ active.ontrack=e=>{$('remoteVideo').srcObject=e.streams[0] || new MediaStream([e.track]);log('Remote VP8 video track received')};
+ if(isPublisher){const transceiver=active.addTransceiver(stream.getVideoTracks()[0],{direction:'sendonly',streams:[stream]});const caps=RTCRtpSender.getCapabilities('video');const vp8=caps?.codecs?.filter(c=>c.mimeType.toLowerCase()==='video/vp8');if(!vp8?.length)throw new Error('Browser does not expose VP8');transceiver.setCodecPreferences(vp8)}
+ else active.addTransceiver('video',{direction:'recvonly'});
+ const sock=new WebSocket(SFU);socket=sock;
+ const ready=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('SFU authentication timeout')),9000);
+  sock.addEventListener('open',()=>sock.send(JSON.stringify({type:'auth',roomId:room.roomId,token:session.secret})),{once:true});
+  sock.addEventListener('message',e=>{const msg=JSON.parse(e.data);if(msg.type==='ready'){clearTimeout(timer);resolve(msg)}else if(msg.type==='error'){clearTimeout(timer);reject(new Error(msg.error))}},{once:true});
+  sock.addEventListener('close',e=>{clearTimeout(timer);reject(new Error('SFU closed '+e.code+' '+e.reason))},{once:true})
+ });
+ captureEvent('media_authorized',{role:ready.role});log('SFU ready as '+ready.role);
+ const offer=await active.createOffer();await active.setLocalDescription(offer);await awaitICE(active);
+ const answered=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('SFU answer timeout')),14000);
+ sock.addEventListener('message',async e=>{try{const msg=JSON.parse(e.data);if(msg.type==='answer'){clearTimeout(timer);await active.setRemoteDescription({type:'answer',sdp:msg.sdp});resolve()}else if(msg.type==='error'){clearTimeout(timer);reject(new Error(msg.error))}}catch(err){clearTimeout(timer);reject(err)}},{once:true})});
+ sock.send(JSON.stringify({type:'offer',sdp:active.localDescription.sdp}));await answered;
+ sock.onclose=evt=>{captureEvent('sfu_socket_closed',{closeCode:evt.code,reason:evt.reason,ignoredLocally:!!$('ignoreNotices').checked});log('SFU signaling closed: '+evt.code+' '+evt.reason);$('connection').textContent='SFU socket closed '+evt.code;remoteFramesAtRevoke=$('stats').textContent;
+  // Non-cooperative simulation: deliberately keep the browser's local PC open.
+  // The server's *own* PeerConnection is closed; no additional packets should arrive.
+  if($('ignoreNotices').checked && evt.code===4003){log('LAB: local PeerConnection intentionally left open; server must enforce revocation')}else disconnect();
+ };
+ statsTimer=setInterval(async()=>{if(!pc||pc!==active)return;try{const stats=await active.getStats();let bytesIn=0,frames=0,bytesOut=0,packetIn=0;stats.forEach(s=>{if(s.type==='inbound-rtp'&&(s.kind==='video'||s.mediaType==='video')){bytesIn+=s.bytesReceived||0;frames+=s.framesDecoded||0;packetIn+=s.packetsReceived||0}if(s.type==='outbound-rtp'&&(s.kind==='video'||s.mediaType==='video'))bytesOut+=s.bytesSent||0});$('stats').textContent=`role=${room?.role} | state=${active.connectionState}\nbytesReceived=${bytesIn} | framesDecoded=${frames} | packetsReceived=${packetIn}\nbytesSent=${bytesOut} | timestamp=${new Date().toISOString()}`;addSample({role:room?.role||null,connectionState:active.connectionState,bytesReceived:bytesIn,framesDecoded:frames,packetsReceived:packetIn,bytesSent:bytesOut});}catch(e){fail(e)}},300);
+}
+$('connect').onclick=()=>safe(connect);
+window.addEventListener('beforeunload',disconnect);
+</script>
+</body>
+</html>

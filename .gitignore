@@ -10,3 +10,9 @@ safestream-v03-patch/
 safestream-v04/
 safestream-v05-gateway/
 safestream-v06-benchmark/
+safestream-v07-validation/
+safestream-v07/
+reports/t07/
+sfu/*.exe
+sfu/*.test
+sfu/*.log
