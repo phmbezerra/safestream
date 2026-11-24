@@ -18,6 +18,7 @@ var roomPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{12}$`)
 var tokenPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{32}$`)
 
 var ErrUnauthorized = errors.New("room access denied")
+var ErrUnavailable = errors.New("authorization service unavailable")
 
 type Validator struct {
 	BaseURL string
@@ -45,15 +46,20 @@ func (v *Validator) Check(ctx context.Context, roomID, bearer string) (string, e
 	req.Header.Set("Authorization", "Bearer "+bearer)
 	res, err := v.Client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("authorization API unavailable: %w", err)
+		return "", fmt.Errorf("%w: request failed: %v", ErrUnavailable, err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
+	// T-08B: a 5xx/429 response is NOT evidence of membership revocation.
+	switch res.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
 		return "", ErrUnauthorized
+	default:
+		return "", fmt.Errorf("%w: HTTP %d", ErrUnavailable, res.StatusCode)
 	}
 	var data roomResponse
 	if err := json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&data); err != nil {
-		return "", fmt.Errorf("invalid authorization response: %w", err)
+		return "", fmt.Errorf("%w: invalid JSON response: %v", ErrUnavailable, err)
 	}
 	if data.RoomID != roomID || (data.Role != "publisher" && data.Role != "viewer") {
 		return "", ErrUnauthorized

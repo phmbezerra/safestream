@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/phmbezerra/safestream/sfu/internal/auth"
+	"github.com/phmbezerra/safestream/sfu/internal/policy"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 )
@@ -205,30 +206,23 @@ func (r *registry) attach(token, roomID, role string, sock *websocket.Conn) (*cl
 	return c, nil
 }
 
+// T-08B: authorization outages fail closed, but are NEVER mislabeled revocations.
 func (c *client) monitorAccess(v *auth.Validator) {
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-	for {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
 		select {
 		case <-c.closed:
-			return
-		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
-			role, err := v.Check(ctx, c.roomID, c.token)
 			cancel()
-			if err != nil || role != c.role {
-				decision := "role_mismatch"
-				if errors.Is(err, auth.ErrUnauthorized) {
-					decision = "membership_denied"
-				} else if err != nil {
-					decision = "authorization_check_error"
-				}
-				c.audit("authorization_rejected", map[string]any{"decision": decision})
-				c.stop(4003, "room membership revoked")
-				return
-			}
+		case <-ctx.Done():
 		}
-	}
+	}()
+	policy.Watch(ctx, pollInterval, 800*time.Millisecond, c.role,
+		func(probe context.Context) (string, error) { return v.Check(probe, c.roomID, c.token) },
+		func(dec policy.Decision) {
+			c.audit(dec.Event, map[string]any{"decision": dec.ReasonKey})
+			c.stop(dec.CloseCode, dec.CloseText)
+		})
 }
 
 func (c *client) acceptOffer(sdp string) error {
@@ -286,7 +280,12 @@ func main() {
 		role, err := v.Check(ctx, hello.RoomID, hello.Token)
 		cancel()
 		if err != nil {
-			_ = sock.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "not a room member"), time.Now().Add(time.Second))
+			// T-08B: deny new media admissions during an outage, without claiming revocation.
+			code, reason := 4001, "not a room member"
+			if !errors.Is(err, auth.ErrUnauthorized) {
+				code, reason = 1013, "authorization service unavailable"
+			}
+			_ = sock.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason), time.Now().Add(time.Second))
 			_ = sock.Close()
 			return
 		}
