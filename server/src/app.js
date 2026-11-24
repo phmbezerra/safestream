@@ -2,8 +2,8 @@ import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createStore } from './core.js';
 import { createMediaGateway } from './media-gateway.js';
-export function createApp(){
- const store=createStore();
+export function createApp({ stateFile = null } = {}){
+ const store=createStore({stateFile});
  const mediaGateway=createMediaGateway(store);
  function json(res,status,obj){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'http://localhost:5173','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS'});res.end(JSON.stringify(obj));}
  async function read(req){let data='';for await(const c of req){data+=c;if(data.length>8192)throw Object.assign(new Error('Payload too large'),{status:413});}try{return JSON.parse(data||'{}')}catch{throw Object.assign(new Error('Invalid JSON'),{status:400})}}

@@ -17,3 +17,5 @@ sfu/*.exe
 sfu/*.test
 sfu/*.log
 safestream-v08-failclosed/
+.local/
+safestream-v09-recovery/
