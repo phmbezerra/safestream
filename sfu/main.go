@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"sync"
@@ -46,6 +47,7 @@ type room struct {
 
 type registry struct {
 	rooms map[string]*room
+	rtcAPI *webrtc.API // nil retains the original default for normal tests
 	mu    sync.Mutex
 }
 
@@ -133,7 +135,13 @@ func (r *registry) attach(token, roomID, role string, sock *websocket.Conn) (*cl
 	if role == "publisher" && rm.publisher != nil {
 		return nil, errors.New("room already has a publisher")
 	}
-	peer, err := webrtc.NewPeerConnection(webrtc.Configuration{ICEServers: nil})
+	var peer *webrtc.PeerConnection
+	var err error
+	if r.rtcAPI != nil {
+		peer, err = r.rtcAPI.NewPeerConnection(webrtc.Configuration{ICEServers: nil})
+	} else {
+		peer, err = webrtc.NewPeerConnection(webrtc.Configuration{ICEServers: nil})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +261,11 @@ func (c *client) acceptOffer(sdp string) error {
 // newRelayHandler exposes the production WebSocket/media handler to local
 // httptest-based security tests without opening the fixed port 3002.
 func newRelayHandler(v *auth.Validator, reg *registry) http.Handler {
-	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == allowedOrigin }}
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		lanOrigin := os.Getenv("SAFESTREAM_LAN_ORIGIN")
+		return origin == allowedOrigin || (lanOrigin != "" && origin == lanOrigin)
+	}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -322,7 +334,20 @@ func main() {
 		base = "http://127.0.0.1:3001"
 	}
 	v := auth.NewValidator(base)
-	reg := &registry{rooms: make(map[string]*room)}
-	log.Printf("SafeStream v0.7 WebRTC RTP relay at http://127.0.0.1:3002 (Node API: %s)", base)
-	log.Fatal(http.ListenAndServe("127.0.0.1:3002", newRelayHandler(v, reg)))
+	// T-13 LAN stays disabled unless the operator names a local Wi-Fi IP.
+	listenIP := os.Getenv("SAFESTREAM_LAN_IP")
+	if listenIP == "" { listenIP = "127.0.0.1" }
+	var rtcAPI *webrtc.API
+	if os.Getenv("SAFESTREAM_LAN_IP") != "" {
+		if net.ParseIP(listenIP) == nil { log.Fatal("SAFESTREAM_LAN_IP must be a numeric IP") }
+		var se webrtc.SettingEngine
+		// Exclude VPN/virtual NIC candidates in this deliberately single-interface lab.
+		se.SetIPFilter(func(ip net.IP) bool { return ip.String() == listenIP })
+		if err := se.SetEphemeralUDPPortRange(42000, 42199); err != nil { log.Fatal(err) }
+		rtcAPI = webrtc.NewAPI(webrtc.WithSettingEngine(se))
+	}
+	reg := &registry{rooms: make(map[string]*room), rtcAPI: rtcAPI}
+	addr := net.JoinHostPort(listenIP, "3002")
+	log.Printf("SafeStream v0.7 WebRTC RTP relay at http://%s (Node API: %s)", addr, base)
+	log.Fatal(http.ListenAndServe(addr, newRelayHandler(v, reg)))
 }

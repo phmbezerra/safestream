@@ -5,7 +5,11 @@ import { createMediaGateway } from './media-gateway.js';
 export function createApp({ stateFile = null } = {}){
  const store=createStore({stateFile});
  const mediaGateway=createMediaGateway(store);
- function json(res,status,obj){res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'http://localhost:5173','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS'});res.end(JSON.stringify(obj));}
+ // T13 LAN is opt-in; accept only the explicit second development origin.
+ const origins=new Set(['http://localhost:5173']);
+ const lanOrigin=process.env.SAFESTREAM_LAN_ORIGIN;
+ if(lanOrigin)origins.add(lanOrigin);
+ function json(res,status,obj){const origin=res.req?.headers?.origin;const headers={'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS','Vary':'Origin'};if(origins.has(origin))headers['Access-Control-Allow-Origin']=origin;res.writeHead(status,headers);res.end(JSON.stringify(obj));}
  async function read(req){let data='';for await(const c of req){data+=c;if(data.length>8192)throw Object.assign(new Error('Payload too large'),{status:413});}try{return JSON.parse(data||'{}')}catch{throw Object.assign(new Error('Invalid JSON'),{status:400})}}
  const server=http.createServer(async(req,res)=>{
   if(req.method==='OPTIONS')return json(res,200,{});
@@ -27,7 +31,7 @@ export function createApp({ stateFile = null } = {}){
   }catch(e){return json(res,e.status||500,{error:e.status?e.message:'Internal error'});}
  });
  const wss=new WebSocketServer({noServer:true,maxPayload:8192});
- server.on('upgrade',(req,socket,head)=>{const u=new URL(req.url,'http://localhost');if(req.headers.origin!=='http://localhost:5173'){socket.destroy();return;}if(u.pathname==='/media'){mediaGateway.wss.handleUpgrade(req,socket,head,ws=>mediaGateway.wss.emit('connection',ws));return;}if(u.pathname!=='/signal'){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws));});
+ server.on('upgrade',(req,socket,head)=>{const u=new URL(req.url,'http://localhost');if(!origins.has(req.headers.origin)){socket.destroy();return;}if(u.pathname==='/media'){mediaGateway.wss.handleUpgrade(req,socket,head,ws=>mediaGateway.wss.emit('connection',ws));return;}if(u.pathname!=='/signal'){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws));});
  wss.on('connection',ws=>{
   let current=null; let uid=null; let authorized=false;
   const fail=(reason)=>{try{ws.send(JSON.stringify({type:'error',error:reason}))}catch{}};
