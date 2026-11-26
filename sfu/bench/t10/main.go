@@ -374,7 +374,20 @@ func loopbackURL(value, scheme string) error {
 	return nil
 }
 
-func runLevel(ctx context.Context, api clientAPI, sfURL string, viewers, pps, payloadSize int, dur time.Duration) levelResult {
+// writePhase emits a best-effort phase marker for local process samplers.
+// Phase "active" starts after WebRTC negotiation and RTP warmup; "complete"
+// is emitted when the fixed-duration sampling window ends. The marker does
+// not change media forwarding or the benchmark's original JSON semantics.
+func writePhase(path, phase string) {
+	if path == "" {
+		return
+	}
+	if err := os.WriteFile(path, []byte(phase+"\n"), 0600); err != nil {
+		fmt.Fprintln(os.Stderr, "T-10C phase marker error:", err)
+	}
+}
+
+func runLevel(ctx context.Context, api clientAPI, sfURL string, viewers, pps, payloadSize int, dur time.Duration, phaseFile string) levelResult {
 	begin := time.Now()
 	result := levelResult{RequestedViewers: viewers, Viewers: make([]viewerResult, viewers)}
 	for i := range result.Viewers {
@@ -474,6 +487,7 @@ func runLevel(ctx context.Context, api clientAPI, sfURL string, viewers, pps, pa
 	initialSent := sent.Load()
 	initialErrors := writeErrors.Load()
 	started := time.Now()
+	writePhase(phaseFile, "active")
 	timer := time.NewTimer(dur)
 	select {
 	case <-ctx.Done():
@@ -481,6 +495,7 @@ func runLevel(ctx context.Context, api clientAPI, sfURL string, viewers, pps, pa
 	case <-timer.C:
 	}
 	result.DurationSeconds = time.Since(started).Seconds()
+	writePhase(phaseFile, "complete")
 	stopSending()
 	<-doneSending
 	time.Sleep(250 * time.Millisecond) // allow already-in-flight packets to arrive; not a cutoff measurement
@@ -522,6 +537,7 @@ func main() {
 	pps := flag.Int("pps", 30, "synthetic RTP packets per second, 5..60")
 	payload := flag.Int("payload", 900, "synthetic RTP payload bytes, 100..1100")
 	out := flag.String("out", "../reports/t10/t10a.json", "JSON report path")
+	phaseFile := flag.String("phase-file", "", "optional phase marker used by local resource sampling")
 	flag.Parse()
 	counts, err := parseLevels(*levels)
 	if err != nil {
@@ -563,7 +579,7 @@ func main() {
 	fmt.Println("SafeStream T-10A | loopback-only synthetic RTP over real WebRTC (NO video decoding)")
 	for _, count := range counts {
 		fmt.Printf("testing %d viewers...\n", count)
-		r := runLevel(ctx, api, *sfURL, count, *pps, *payload, time.Duration(*seconds)*time.Second)
+		r := runLevel(ctx, api, *sfURL, count, *pps, *payload, time.Duration(*seconds)*time.Second, *phaseFile)
 		result.Levels = append(result.Levels, r)
 		fmt.Printf("  connected=%d/%d media=%d/%d packets=%d sent=%d p95-connect=%.1fms\n", r.AdmittedAndConnected, count, r.ViewersWithPackets, r.AdmittedAndConnected, r.TotalPacketsReceived, r.PublisherPacketsSent, r.P95ConnectionMs)
 	}
