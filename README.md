@@ -28,9 +28,21 @@ How can live communication systems combine access controls, proportionate interv
 - Measure response latency, authorization failures, false alarms, and metadata collection.
 - Clearly report limitations and findings, including negative results.
 
-## Not in scope for v0.1
+## Current scope and limitations
 
-Discord client modifications, platform restriction bypasses, real identity or age verification, real-world automated abuse recognition, collection of minors' data, or third-party private communications.
+SafeStream is currently a standalone experimental research prototype focused on privacy-preserving communication, access control, and server-enforced revocation.
+
+The following capabilities are not implemented or validated:
+
+- Integration with Discord or other third-party communication platforms.
+- Real-world identity verification or age assurance.
+- Automated detection of abuse or harmful content.
+- Production-ready deployment, public-network connectivity, and security hardening.
+- Collection or processing of real minors' data or third-party private communications.
+
+Modifying third-party clients or circumventing platform restrictions is not part of the project's objectives.
+
+Future research may expand the prototype's capabilities, subject to technical, ethical, privacy, and legal evaluation.
 
 ## Documents
 
