@@ -4,7 +4,13 @@
 
 SafeStream is an independent, open-source-intended research and engineering project exploring how live communication platforms can reduce serious safety risks, particularly those affecting children and adolescents, while minimizing intrusion into private communications.
 
-> **Status: planning (v0.1).** No functional safety controls, age-assurance services, automated detection models, or Discord integration have been implemented. SafeStream does not claim regulatory compliance or demonstrated effectiveness.
+> **Status: experimental research prototype — T-13 validated (November 26, 2026).**
+>
+> SafeStream currently includes a standalone WebRTC/VP8 laboratory prototype with demonstration sessions, room-based access controls, publishing/viewing authorization, one-time invitations, and server-enforced selective viewer revocation.
+>
+> Cross-device LAN streaming and selective revocation have been experimentally validated. See the [T-13 experiment report](docs/experiment-t13.md).
+>
+> The project is not production-ready. Age assurance, automated abuse detection, Discord integration, and real-world safety effectiveness have not been demonstrated.
 
 ## Background
 
@@ -14,7 +20,7 @@ In August 2026, Brazil's National Data Protection Authority (ANPD) ordered a pre
 
 How can live communication systems combine access controls, proportionate interventions and privacy-preserving signals to reduce serious risks without indiscriminate content monitoring?
 
-## Initial goals
+## Research goals
 
 - Build a standalone, consent-based WebRTC research environment with synthetic accounts and safe test media.
 - Evaluate room access controls, publishing/viewing authorization and session revocation.
@@ -32,11 +38,20 @@ Discord client modifications, platform restriction bypasses, real identity or ag
 - [Threat model](docs/threat-model.md)
 - [Requirements](docs/requirements.md)
 - [Roadmap](docs/roadmap.md)
+- [T-13: LAN interoperability and selective revocation](docs/experiment-t13.md)
 - [Contributing](CONTRIBUTING.md)
 
-## Candidate stack (subject to architecture review)
+## Technology stack
 
-React / TypeScript, Node.js / Fastify, WebRTC, PostgreSQL, Vitest, Playwright and Python for offline metrics.
+The current experimental prototype uses:
+
+- React, TypeScript and Vite for the frontend.
+- Node.js for the API, authentication and room management.
+- Go and Pion WebRTC for the media relay.
+- WebRTC and VP8 for real-time video streaming.
+- PowerShell and Python for local experimental tooling.
+
+Additional technologies may be evaluated in future research phases.
 
 ## Research commitments
 
