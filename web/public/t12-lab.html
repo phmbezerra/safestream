@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SafeStream T-12 · Real VP8 Fan-out Laboratory</title>
+<style>
+:root{font-family:Inter,system-ui,'Segoe UI',sans-serif;background:#0d1525;color:#edf3ff;color-scheme:dark}*{box-sizing:border-box}
+body{max-width:1180px;margin:20px auto;padding:0 16px 70px}h1{font-size:2rem;margin-bottom:0}h1 span{color:#8cc8ff}h2{font-size:1.14rem;margin:0 0 10px}
+p{color:#b4c3db;line-height:1.5}section{background:#192438;border:1px solid #30415a;border-radius:12px;margin:14px 0;padding:17px}
+.notice{border-color:#756339;background:#2c2b28}button{border:1px solid #6589cf;border-radius:7px;background:#3563ad;padding:10px 14px;color:white;font-weight:600;cursor:pointer;margin:3px}button:hover:not(:disabled){background:#4c7aca}button:disabled{opacity:.42;cursor:not-allowed}.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.mono,pre{font:13px Consolas,ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}pre{max-height:240px;overflow:auto;padding:12px;background:#101a2b;border-radius:8px}.small{font-size:.86rem}.muted{color:#95abc9}
+#publisherVideo{width:min(100%,420px);background:#050a11;aspect-ratio:16/9;border-radius:8px;object-fit:contain}#viewers{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.tile{padding:7px;background:#101a2b;border:1px solid #34445e;border-radius:9px;min-width:0}.tile video{width:100%;display:block;aspect-ratio:16/9;object-fit:contain;background:#010407;border-radius:4px}.tile strong{font-size:.9rem}.tile .info{font:11px Consolas,monospace;white-space:pre-line;min-height:42px;color:#aac5df}.tile .info.error{color:#ffa7aa}#status{padding:9px 12px;background:#101a2b;border-radius:8px;min-height:36px}#progress{font-weight:700;color:#afe6c4}label{display:block;margin:6px 0}input[type=checkbox]{width:18px;height:18px;vertical-align:middle}a{color:#9dccff}
+@media(max-width:850px){#viewers{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:540px){#viewers{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<h1>SafeStream <span>T-12 · VP8 Fan-out</span></h1>
+<p>One real screen-capture publisher → 2, 5, 10 or 20 independently authenticated WebRTC viewers in one browser tab. Measures <b>decoded video</b>, not RTP delivery alone.</p>
+<section class="notice"><b>Research limitations:</b> Local loopback only; all decoders and publisher share one browser/computer. This is a combined SFU + client CPU stress test, <b>not</b> a measurement of independent viewer devices or internet capacity. VP8 is readable by the SFU (not E2EE). Share only non-sensitive test video. Keep this dashboard <b>visible in the foreground</b> during measurements.</section>
+<section>
+<h2>1 · Create isolated test room</h2>
+<div class="row"><button id="createRoom">Create T-12 room + publisher session</button><span id="roomInfo" class="mono muted">No test room</span></div>
+<p class="small">Every virtual viewer receives a distinct demo session and a distinct one-use invite from the room publisher. Credentials and invites remain in browser memory and are NEVER exported.</p>
+</section>
+<section>
+<h2>2 · Start real VP8 broadcast</h2>
+<div class="row"><button id="startPublisher" disabled>Share moving screen/window + connect publisher</button><button id="stopAll" disabled>Stop all / release connections</button></div>
+<div class="row"><video id="publisherVideo" autoplay muted playsinline></video><div><b id="publisherState">No publisher media</b><p class="small">Select a moving window or screen at around 30 FPS. Leave this test page visible afterward. Never share private notifications.</p></div></div>
+</section>
+<section>
+<h2>3 · Ramp viewer load</h2>
+<div class="row"><button id="ramp2" disabled>Ramp to 2</button><button id="ramp5" disabled>Ramp to 5</button><button id="ramp10" disabled>Ramp to 10</button><button id="ramp20" disabled>Ramp to 20</button><button id="measure" disabled>Measure current stage (20 seconds)</button></div>
+<div id="status" class="mono" aria-live="polite">Start by creating the room.</div>
+<p id="progress"></p>
+<div id="viewers" aria-label="Viewer video preview grid"></div>
+</section>
+<section>
+<h2>4 · Export telemetry</h2>
+<div class="row"><button id="export">Export T-12 JSON</button><span id="summary" class="mono muted">No samples</span></div>
+<p class="small">Export after completing stages; then stop connections. JSON contains frame/packet counters, timestamps, room ID and browser metadata, but <b>no</b> SDP, bearer tokens, invites, ICE candidates, IP addresses or video content. Raw telemetry stays local unless you choose to share it.</p>
+<pre id="events">Events will appear here.</pre>
+</section>
+<script type="module">
+const API='http://127.0.0.1:3101', SFU='ws://127.0.0.1:3002/ws';
+const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const evidence={schemaVersion:'t12-browser-1',startedAt:new Date().toISOString(),browser:navigator.userAgent,
+  lab:{topology:'one-browser-many-independent-viewer-peerconnections',source:'display_capture',codec:'VP8',targetNominalFps:30},events:[],samples:[]};
+let owner=null,roomId=null,publisher=null,source=null,viewers=[],nextViewer=1,statsTimer=null,statsBusy=false,busy=false,measuring=false,phaseIndex=0;
+const lastSamples=new Map();
+function event(type,details={}){const e={at:new Date().toISOString(),type,...details};evidence.events.push(e);if(evidence.events.length>2000)evidence.events.shift();const line=`${e.at.slice(11,19)}  ${type} ${JSON.stringify(details)}`;$('events').textContent=(line+'\n'+$('events').textContent).slice(0,14000);}
+function status(msg){$('status').textContent=msg;}
+function fail(err){const m=err?.message||String(err);event('error',{message:m});status('ERROR: '+m);console.error(err);}
+function refreshButtons(){const ok=!!publisher&&!busy; $('createRoom').disabled=!!owner||busy; $('startPublisher').disabled=!owner||!!publisher||busy;
+  $('stopAll').disabled=!owner||busy;for(const n of [2,5,10,20])$('ramp'+n).disabled=!ok||viewers.length>=n;
+  $('measure').disabled=!ok||viewers.length<2;}
+async function work(fn){if(busy)return;busy=true;refreshButtons();try{await fn()}catch(err){fail(err)}finally{busy=false;refreshButtons()}}
+async function api(method,path,body,token){const headers={'Content-Type':'application/json'};if(token)headers.Authorization='Bearer '+token;
+ const resp=await fetch(API+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+ let data;try{data=await resp.json()}catch{throw new Error('API response not JSON: '+resp.status)}
+ if(!resp.ok)throw new Error('API '+resp.status+': '+(data.error||'request failed'));return data;}
+function awaitIce(pc){if(pc.iceGatheringState==='complete')return Promise.resolve();return new Promise((resolve,reject)=>{
+ const timer=setTimeout(()=>{cleanup();reject(new Error('ICE gathering timeout'))},12000);
+ function cleanup(){clearTimeout(timer);pc.removeEventListener('icegatheringstatechange',check)}
+ function check(){if(pc.iceGatheringState==='complete'){cleanup();resolve()}}pc.addEventListener('icegatheringstatechange',check);
+ });}
+function nextMessage(ws,type,timeoutMs){return new Promise((resolve,reject)=>{
+ const timer=setTimeout(()=>{cleanup();reject(new Error('SFU '+type+' timeout'))},timeoutMs);
+ function cleanup(){clearTimeout(timer);ws.removeEventListener('message',message);ws.removeEventListener('close',close);ws.removeEventListener('error',error)}
+ function message(ev){let msg;try{msg=JSON.parse(ev.data)}catch{return}if(msg.type==='error'){cleanup();reject(new Error(msg.error||'SFU error'))}else if(msg.type===type){cleanup();resolve(msg)}}
+ function close(ev){cleanup();reject(new Error('SFU socket closed '+ev.code+' '+ev.reason))}
+ function error(){cleanup();reject(new Error('SFU WebSocket network error'))}
+ ws.addEventListener('message',message);ws.addEventListener('close',close);ws.addEventListener('error',error);
+ });}
+async function connectPeer({token,kind,key,video,track}){
+ const pc=new RTCPeerConnection({iceServers:[]});let ws=null;
+ try{
+  pc.onconnectionstatechange=()=>event('pc_state',{key,state:pc.connectionState});
+  if(kind==='publisher'){
+   const x=pc.addTransceiver(track,{direction:'sendonly',streams:[source]});
+   const caps=RTCRtpSender.getCapabilities('video');const vp8=caps?.codecs?.filter(c=>c.mimeType.toLowerCase()==='video/vp8');
+   if(!vp8?.length)throw new Error('VP8 not supported');x.setCodecPreferences(vp8);
+  }else{
+   pc.addTransceiver('video',{direction:'recvonly'});
+   pc.ontrack=e=>{video.srcObject=e.streams[0]||new MediaStream([e.track]);video.play().catch(err=>event('autoplay_error',{key,message:String(err)}));};
+  }
+  ws=new WebSocket(SFU);
+  const ready=nextMessage(ws,'ready',12000);
+  ws.addEventListener('open',()=>ws.send(JSON.stringify({type:'auth',roomId,token})),{once:true});
+  const auth=await ready;if(auth.role!==kind)throw new Error('Unexpected SFU role for '+key+': '+auth.role);
+  const offer=await pc.createOffer();await pc.setLocalDescription(offer);await awaitIce(pc);
+  const answer=nextMessage(ws,'answer',18000);ws.send(JSON.stringify({type:'offer',sdp:pc.localDescription.sdp}));
+  const data=await answer;await pc.setRemoteDescription({type:'answer',sdp:data.sdp});
+  ws.addEventListener('close',e=>event('socket_closed',{key,code:e.code,reason:e.reason}));
+  event('peer_ready',{key,kind});return {key,pc,ws,video};
+ }catch(err){try{ws?.close()}catch{}try{pc.close()}catch{}throw err}
+}
+function makeViewerTile(key){const box=document.createElement('div');box.className='tile';
+ const title=document.createElement('strong');title.textContent=key;const vid=document.createElement('video');vid.autoplay=true;vid.muted=true;vid.playsInline=true;
+ const info=document.createElement('div');info.className='info';info.textContent='connecting…';box.append(title,vid,info);$('viewers').append(box);
+ return {box,vid,info};}
+async function addViewer(){if(!owner||!publisher)throw new Error('Start publisher before adding viewers');
+ const key='V'+String(nextViewer++).padStart(2,'0');const tile=makeViewerTile(key);let p=null;
+ try{
+  const session=await api('POST','/api/sessions',{label:'T12'+key});
+  const invitation=await api('POST',`/api/rooms/${roomId}/invites`,undefined,owner.secret);
+  await api('POST',`/api/rooms/${roomId}/join`,{invite:invitation.invite},session.secret);
+  p=await connectPeer({token:session.secret,kind:'viewer',key,video:tile.vid});
+  viewers.push({...p,...tile});tile.info.textContent='connected; waiting for frames';event('viewer_added',{key,active:viewers.length});
+ }catch(err){tile.info.textContent='FAILED '+(err?.message||String(err));tile.info.classList.add('error');event('viewer_failed',{key,message:String(err)});throw err}
+}
+function stop(){if(statsTimer){clearInterval(statsTimer);statsTimer=null}for(const v of viewers){try{v.ws.close()}catch{}try{v.pc.close()}catch{}try{v.video.srcObject=null}catch{}}
+ viewers=[];if(publisher){try{publisher.ws.close()}catch{}try{publisher.pc.close()}catch{}publisher=null}
+ if(source){source.getTracks().forEach(t=>t.stop());source=null}$('publisherVideo').srcObject=null;$('publisherState').textContent='Stopped';event('all_stopped');}
+$('createRoom').onclick=()=>work(async()=>{
+ const s=await api('POST','/api/sessions',{label:'T12Alice'});owner=s;
+ const r=await api('POST','/api/rooms',undefined,s.secret);roomId=r.roomId;
+ evidence.roomId=roomId;$('roomInfo').textContent='Room '+roomId+' · Alice';event('room_created',{roomId});status('Room created. Start screen capture.');
+});
+$('startPublisher').onclick=()=>work(async()=>{
+ if(!owner||!roomId)throw new Error('Create room first');
+ source=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:30,max:30}},audio:false});
+ const track=source.getVideoTracks()[0];if(!track)throw new Error('No captured video track');
+ track.addEventListener('ended',()=>{event('source_ended');stop();refreshButtons()},{once:true});
+ $('publisherVideo').srcObject=source;
+ try{publisher=await connectPeer({token:owner.secret,kind:'publisher',key:'Alice',track,video:$('publisherVideo')})}
+ catch(err){source.getTracks().forEach(t=>t.stop());source=null;$('publisherVideo').srcObject=null;throw err}
+ $('publisherState').textContent='Alice connected · '+(track.getSettings().width||'?')+'×'+(track.getSettings().height||'?');
+ event('publisher_started',{source:'screen_capture',resolution:{width:track.getSettings().width||null,height:track.getSettings().height||null}});
+ if(!statsTimer)statsTimer=setInterval(()=>collectStats().catch(fail),1000);await collectStats();status('Publisher active. Ramp to 2 viewers.');
+});
+for(const count of [2,5,10,20])$('ramp'+count).onclick=()=>work(async()=>{
+ if(!publisher)throw new Error('Publisher not running');
+ if(viewers.length>=count)throw new Error('Viewer count already '+viewers.length);
+ event('ramp_begin',{target:count,from:viewers.length});
+ while(viewers.length<count){status('Connecting virtual viewer '+(viewers.length+1)+'/'+count+'…');await addViewer()}
+ event('ramp_complete',{target:count,actual:viewers.length});status(count+' authenticated viewers connected. Let videos stabilize ~5 seconds, then measure.');
+});
+$('measure').onclick=()=>work(async()=>{
+ if(!publisher||viewers.length<2)throw new Error('Publisher and at least two viewers required');
+ if(viewers.some(v=>v.pc.connectionState!=='connected'))throw new Error('Not all viewers are connected yet; wait or review tiles');
+ measuring=true;const count=viewers.length,phaseId='phase'+(++phaseIndex);
+ try{
+  status('Warming up for 5 seconds. Keep dashboard visible…');await sleep(5000);
+  if(viewers.length!==count||!publisher)throw new Error('Viewer count changed during warmup');
+  if(document.visibilityState!=='visible')throw new Error('Dashboard hidden at start; keep test foreground');
+  event('phase_start',{phaseId,target:count,viewerKeys:viewers.map(v=>v.key)});
+  status('Recording '+count+' viewers for 20 seconds. KEEP DASHBOARD VISIBLE.');
+  await sleep(20000);
+  event('phase_end',{phaseId,target:count});status('Stage '+count+' complete. Export when finished all stages.');
+ }finally{measuring=false}
+});
+$('stopAll').onclick=()=>work(async()=>{stop();status('All media connections closed. Exported files are unaffected. Reload for a new room.');});
+$('export').onclick=()=>{
+ const out={...evidence,exportedAt:new Date().toISOString(),notes:'Local T-12 browser experiment. No SDP, bearer, invite, ICE candidates or video recorded.'};
+ const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='t12-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+};
+async function sample(p){let report;try{report=await p.pc.getStats()}catch(err){event('stats_error',{key:p.key,message:String(err)});return}
+ let inboundPresent=false,framesDecoded=null,framesReceived=null,packetsReceived=null,bytesReceived=null,packetsLost=null,framesDropped=null,freezeCount=null,codec=null;
+ let framesEncoded=null,bytesSent=null,sourceFps=null,qualityLimitationReason=null;
+ report.forEach(s=>{
+  if(s.type==='inbound-rtp'&&(s.kind==='video'||s.mediaType==='video')){
+   inboundPresent=true;framesDecoded=(framesDecoded||0)+(s.framesDecoded||0);framesReceived=(framesReceived||0)+(s.framesReceived||0);
+   packetsReceived=(packetsReceived||0)+(s.packetsReceived||0);bytesReceived=(bytesReceived||0)+(s.bytesReceived||0);
+   packetsLost=(packetsLost||0)+(s.packetsLost||0);framesDropped=(framesDropped||0)+(s.framesDropped||0);freezeCount=(freezeCount||0)+(s.freezeCount||0);
+   const c=s.codecId?report.get(s.codecId):null;if(c?.mimeType)codec=c.mimeType;
+  }
+  if(s.type==='outbound-rtp'&&(s.kind==='video'||s.mediaType==='video')){
+   if(Number.isFinite(s.framesEncoded))framesEncoded=(framesEncoded||0)+s.framesEncoded;
+   if(Number.isFinite(s.bytesSent))bytesSent=(bytesSent||0)+s.bytesSent;
+   if(typeof s.qualityLimitationReason==='string')qualityLimitationReason=s.qualityLimitationReason;
+  }
+  if(s.type==='media-source'&&(s.kind==='video'||s.mediaType==='video')&&Number.isFinite(s.framesPerSecond))sourceFps=s.framesPerSecond;
+ });
+ const playback=p.video&&typeof p.video.getVideoPlaybackQuality==='function'?p.video.getVideoPlaybackQuality():null;
+ const playbackFrames=playback&&Number.isFinite(playback.totalVideoFrames)?playback.totalVideoFrames:null;
+ const item={at:new Date().toISOString(),key:p.key,role:p.key==='Alice'?'publisher':'viewer',connectionState:p.pc.connectionState,
+  visibilityState:document.visibilityState,hasFocus:document.hasFocus(),inboundStatsPresent:inboundPresent,
+  framesDecoded,framesReceived,packetsReceived,bytesReceived,packetsLost,framesDropped,freezeCount,
+  playbackFrames,videoWidth:p.video?.videoWidth||0,videoHeight:p.video?.videoHeight||0,videoReadyState:p.video?.readyState??null,
+  codec,framesEncoded,bytesSent,sourceFps,qualityLimitationReason};
+ const prev=lastSamples.get(p.key);lastSamples.set(p.key,item);
+ let fps=null;if(prev){const old=item.role==='publisher'?prev.framesEncoded:prev.framesDecoded;
+  const now=item.role==='publisher'?item.framesEncoded:item.framesDecoded;
+  const elapsed=(Date.parse(item.at)-Date.parse(prev.at))/1000;
+  if(elapsed>0&&Number.isFinite(old)&&Number.isFinite(now)&&now>=old)fps=(now-old)/elapsed;
+ }
+ if(p.key==='Alice')$('publisherState').textContent='Alice '+p.pc.connectionState+' · encoded '+(fps===null?'n/a':fps.toFixed(1)+' FPS')+
+ ' · sourceFPS '+(sourceFps===null?'n/a':sourceFps)+' · quality '+(qualityLimitationReason||'n/a');
+ else if(p.info){p.info.textContent=p.pc.connectionState+' | '+(fps===null?'n/a':fps.toFixed(1)+' FPS')+'\n'+
+  (codec||'codec unknown')+' | decoded '+(framesDecoded??'n/a')+'\n'+(item.videoWidth||'?')+'×'+(item.videoHeight||'?');}
+ evidence.samples.push(item);
+ if(evidence.samples.length>15000){evidence.samples.shift();if(evidence.samples.length===15000)event('samples_truncated')}
+}
+async function collectStats(){if(statsBusy||!publisher)return;statsBusy=true;
+ try{await Promise.all([publisher,...viewers].map(v=>sample(v)));
+  $('summary').textContent=evidence.samples.length+' samples / '+evidence.events.length+' events · '+viewers.length+' viewers';
+ }finally{statsBusy=false}}
+window.addEventListener('beforeunload',()=>{try{stop()}catch{}});
+refreshButtons();
+</script>
+</body>
+</html>

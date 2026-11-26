@@ -26,3 +26,7 @@ safestream-v11-t10b/
 safestream-v12-t10c/
 safestream-v13-t11a/
 safestream-v14-t11b/
+reports/t12/
+safestream-v15-t12/
+__pycache__/
+*.py[cod]
