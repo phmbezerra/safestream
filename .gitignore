@@ -20,3 +20,5 @@ safestream-v08-failclosed/
 .local/
 safestream-v09-recovery/
 safestream-v10-isolation/
+safestream-v11-t10a/
+reports/t10/
