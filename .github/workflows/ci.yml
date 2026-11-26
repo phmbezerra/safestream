@@ -1,0 +1,56 @@
+﻿name: SafeStream CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: Node tests and frontend build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run server tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+  go:
+    name: Go tests and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: sfu/go.mod
+          cache-dependency-path: sfu/go.sum
+
+      - name: Run Go tests
+        working-directory: sfu
+        run: go test ./...
+
+      - name: Build Go packages
+        working-directory: sfu
+        run: go build ./...
