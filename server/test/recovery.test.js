@@ -24,27 +24,24 @@ function setup(file) {
   return { db, alice, bob, carol, rm };
 }
 
-test('T-08C: allowed sessions and room membership survive Node store restart', t => {
+test('T-08C/T-14: identities survive but old rooms do not resume', t => {
   const file = fixture(t);
   const { alice, bob, rm } = setup(file);
   const restored = createStore({ stateFile: file });
   assert.deepEqual(restored.identity(alice.secret), alice.user);
   assert.deepEqual(restored.identity(bob.secret), bob.user);
-  assert.equal(restored.get(rm.id).members.get(bob.user.id).role, 'viewer');
-  assert.equal(restored.get(rm.id).members.get(alice.user.id).role, 'publisher');
-  assert.equal(restored.get(rm.id).peers.size, 0);
-  assert.equal(restored.get(rm.id).invites.size, 0);
+  assert.throws(() => restored.get(rm.id), /Room not found/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).rooms, []);
 });
 
-test('T-08C: revoked membership is never restored by restart', t => {
+test('T-08C/T-14: revoked membership and old rooms never resume', t => {
   const file = fixture(t);
   const { db, alice, bob, carol, rm } = setup(file);
   db.revoke(rm, alice.user, bob.user.id);
   const restored = createStore({ stateFile: file });
   assert.equal(restored.identity(bob.secret).id, bob.user.id); // identity still exists
-  assert.throws(() => restored.requireMember(restored.get(rm.id), bob.user), /Not a room member/);
-  assert.equal(restored.requireMember(restored.get(rm.id), carol.user).role, 'viewer');
-  assert.equal(restored.requireMember(restored.get(rm.id), alice.user).role, 'publisher');
+  assert.throws(() => restored.get(rm.id), /Room not found/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).rooms, []);
 });
 
 test('T-08C: bearer secrets and one-use invites are not stored at rest', t => {
@@ -60,7 +57,7 @@ test('T-08C: bearer secrets and one-use invites are not stored at rest', t => {
   assert.equal(data.includes(unused), false);
   assert.equal(data.includes('fingerprint'), true);
   const restored = createStore({stateFile: file});
-  assert.throws(() => restored.join(restored.get(rm.id), b.user, unused), /Invalid or expired invite/);
+  assert.throws(() => restored.get(rm.id), /Room not found/);
 });
 
 test('T-08C: invalid persisted state refuses startup instead of resetting permissions', t => {
@@ -87,7 +84,7 @@ test('T-08C: failed disk commit does not emit revocation or alter in-memory gran
   assert.equal(fakePeer.closed, undefined);
 });
 
-test('T-08C: HTTP membership API restores grants but never revoked access', async t => {
+test('T-08C/T-14: HTTP API refuses all old rooms after restart', async t => {
   const file = fixture(t);
   const { alice, bob, carol, rm, db } = setup(file);
   db.revoke(rm, alice.user, bob.user.id);
@@ -107,7 +104,7 @@ test('T-08C: HTTP membership API restores grants but never revoked access', asyn
     });
     return response.status;
   }
-  assert.equal(await membership(alice.secret), 200);
-  assert.equal(await membership(carol.secret), 200);
-  assert.equal(await membership(bob.secret), 403);
+  assert.equal(await membership(alice.secret), 404);
+  assert.equal(await membership(carol.secret), 404);
+  assert.equal(await membership(bob.secret), 404);
 });

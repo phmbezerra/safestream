@@ -25,6 +25,17 @@ export function createApp({ stateFile = null } = {}){
     if(req.method==='POST'&&parts[3]==='join'){const m=store.join(r,user,(await read(req)).invite);return json(res,200,{roomId:r.id,role:m.role});}
     if(req.method==='POST'&&parts[3]==='invites'){store.requireMember(r,user);return json(res,201,{invite:store.invite(r,user)});}
     if(req.method==='GET'&&parts.length===3){const m=store.requireMember(r,user);return json(res,200,{roomId:r.id,ownerId:r.ownerId,role:m.role,members:[...r.members.values()]});}
+    if(req.method==='POST'&&parts[3]==='emergency-stop'&&parts.length===4){
+     let result;
+     try {
+      result=store.emergencyStop(r,user);
+     } finally {
+      // Close legacy media only if the room was actually invalidated.
+      // An unauthorized caller must never trigger this shutdown.
+      if(!store.rooms.has(r.id))mediaGateway.stopRoom(r.id);
+     }
+     return json(res,200,result);
+    }
     if(req.method==='DELETE'&&parts[3]==='members'&&parts[4]){store.requireMember(r,user);store.revoke(r,user,parts[4]);mediaGateway.revoke(r.id,parts[4]);return json(res,200,{revoked:true,notice:'Signaling access removed and cooperative peers notified. A modified P2P client may ignore revocation; media access is NOT cryptographically revoked.'});}
    }
    return json(res,404,{error:'Not found'});

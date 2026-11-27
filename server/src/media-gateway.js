@@ -17,6 +17,23 @@ export function createMediaGateway(store) {
       key(roomId).delete(targetId);
     }
   }
+  function stopRoom(roomId) {
+    const members = sockets.get(roomId);
+    if (!members) return;
+
+    sockets.delete(roomId);
+
+    for (const ws of members.values()) {
+      try {
+        send(ws, {
+          type: 'room-stopped',
+          reason: 'emergency-stop'
+        });
+        ws.close(4004, 'Emergency stop');
+      } catch {}
+    }
+  }
+
   wss.on('connection', ws => {
     let room = null;
     let user = null;
@@ -61,5 +78,5 @@ export function createMediaGateway(store) {
       }
     });
   });
-  return { wss, revoke };
+  return { wss, revoke, stopRoom };
 }

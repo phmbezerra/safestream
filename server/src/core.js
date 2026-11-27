@@ -7,12 +7,17 @@ export const token = () => randomBytes(24).toString('base64url');
 // Invitations and active WebSockets are intentionally never persisted.
 export function createStore({ stateFile = null } = {}) {
   const data = readState(stateFile);
+
+  // T-14: Never restore possibly stale room permissions.
+  // Persist the cleanup before accepting any requests.
+  // If writing fails, startup fails closed.
+  if (stateFile && data.rooms.length) {
+    writeState(stateFile, {...data, rooms: []});
+  }
+
+  // Identity fingerprints survive; old room grants do not.
   const sessions = new Map(data.sessions.map(s => [s.fingerprint, s.user]));
-  const rooms = new Map(data.rooms.map(r => [r.id, {
-    id: r.id, ownerId: r.ownerId,
-    members: new Map(r.members.map(m => [m.id, m])),
-    invites: new Map(), peers: new Map()
-  }]));
+  const rooms = new Map();
 
   function snapshot() {
     return {
@@ -102,5 +107,68 @@ export function createStore({ stateFile = null } = {}) {
     for (const [id, peer] of r.peers)
       if (peer.readyState === 1) peer.send(JSON.stringify({type:'peer-revoked',id:targetId,reason:'membership-revoked'}));
   }
-  return {sessions, rooms, identity, session, room, get, requireMember, invite, join, revoke};
+  // T-14: emergency stop blocks authorization even on disk failure.
+  function emergencyStop(r, actor) {
+    if (r.ownerId !== actor.id)
+      throw Object.assign(
+        new Error('Owner only'), {status:403}
+      );
+
+    if (rooms.get(r.id) !== r)
+      throw Object.assign(
+        new Error('Room not found'), {status:404}
+      );
+
+    let persistenceError = null;
+
+    try {
+      durable(next => {
+        const previous = next.rooms.length;
+        next.rooms = next.rooms.filter(
+          item => item.id !== r.id
+        );
+
+        if (next.rooms.length !== previous - 1)
+          throw new Error(
+            'Room missing from durable state'
+          );
+      });
+    } catch (error) {
+      persistenceError = error;
+    }
+
+    // Block all live authorization, even if persistence failed.
+    rooms.delete(r.id);
+    r.invites.clear();
+    r.members.clear();
+
+    for (const ws of r.peers.values()) {
+      try {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({
+            type: 'room-stopped',
+            reason: 'emergency-stop'
+          }));
+        }
+        ws.close(4004, 'Emergency stop');
+      } catch {}
+    }
+
+    r.peers.clear();
+
+    if (persistenceError) {
+      throw Object.assign(
+        new Error(
+          'Emergency stop not persisted. ' +
+          'Room blocked in memory only; ' +
+          'restart may restore access.'
+        ),
+        {status:503}
+      );
+    }
+
+    return {stopped:true, roomId:r.id};
+  }
+
+  return {sessions, rooms, identity, session, room, get, requireMember, invite, join, revoke, emergencyStop};
 }
