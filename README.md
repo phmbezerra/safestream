@@ -4,11 +4,11 @@
 
 SafeStream is an independent, open-source-intended research and engineering project exploring how live communication platforms can reduce serious safety risks, particularly those affecting children and adolescents, while minimizing intrusion into private communications.
 
-> **Status: experimental research prototype — T-13 validated (November 26, 2026).**
+> **Status: experimental research prototype — T-14 validated (November 27, 2026).**
 >
 > SafeStream currently includes a standalone WebRTC/VP8 laboratory prototype with demonstration sessions, room-based access controls, publishing/viewing authorization, one-time invitations, and server-enforced selective viewer revocation.
 >
-> Cross-device LAN streaming and selective revocation have been experimentally validated. See the [T-13 experiment report](docs/experiment-t13.md).
+> Cross-device LAN streaming and selective revocation were validated in T-13. T-14 experimentally validated owner-controlled room-wide Emergency Stop, local capture termination, and fail-closed recovery. See the [T-13 report](docs/experiment-t13.md) and [T-14 report](docs/experiment-t14.md).
 >
 > The project is not production-ready. Age assurance, automated abuse detection, Discord integration, and real-world safety effectiveness have not been demonstrated.
 
@@ -51,6 +51,7 @@ Future research may expand the prototype's capabilities, subject to technical, e
 - [Requirements](docs/requirements.md)
 - [Roadmap](docs/roadmap.md)
 - [T-13: LAN interoperability and selective revocation](docs/experiment-t13.md)
+- [T-14: Emergency Stop and fail-closed recovery](docs/experiment-t14.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Technology stack
